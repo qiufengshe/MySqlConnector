@@ -5,7 +5,7 @@ using MySqlConnector.Core;
 
 namespace MySqlConnector;
 
-public sealed class MySqlDataAdapter : DbDataAdapter
+public sealed partial class MySqlDataAdapter : DbDataAdapter
 {
 	public MySqlDataAdapter()
 	{
@@ -142,7 +142,12 @@ public sealed class MySqlDataAdapter : DbDataAdapter
 			return null;
 
 		// check for "VALUES(...)" clause
+#if NET7_0_OR_GREATER
+		var match = ValuesRegex().Match(sql);
+#else
 		var match = Regex.Match(sql, @"\bVALUES\s*\([^)]+\)\s*;?\s*$", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+#endif
 		if (!match.Success)
 			return null;
 
@@ -179,7 +184,7 @@ public sealed class MySqlDataAdapter : DbDataAdapter
 			{
 				if (parameterIndex != 0)
 					sqlBuilder.Append(',');
-				var parameterName = "@p" + combinedParameterIndex.ToString(CultureInfo.InvariantCulture);
+				var parameterName = $"@p{combinedParameterIndex.ToString(CultureInfo.InvariantCulture)}";
 				sqlBuilder.Append(parameterName);
 				combinedParameterIndex++;
 				var parameter = command.Parameters[parser.ParameterIndexes[parameterIndex]].Clone();
@@ -239,6 +244,11 @@ public sealed class MySqlDataAdapter : DbDataAdapter
 	}
 
 	private MySqlBatch? m_batch;
+
+#if NET7_0_OR_GREATER
+	[GeneratedRegex(@"\bVALUES\s*\([^)]+\)\s*;?\s*$", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+	private static partial Regex ValuesRegex();
+#endif
 }
 
 #pragma warning disable CA1711 // Identifiers should not have incorrect suffix

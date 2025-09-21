@@ -262,7 +262,7 @@ public sealed class MySqlBulkCopy
 		// merge column mappings with the destination schema
 		var columnMappings = new List<MySqlBulkCopyColumnMapping>(ColumnMappings);
 		var addDefaultMappings = columnMappings.Count == 0;
-		using (var cmd = new MySqlCommand("select * from " + tableName + ";", m_connection, m_transaction))
+		using (var cmd = new MySqlCommand($"select * from {tableName};", m_connection, m_transaction))
 		using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SchemaOnly, ioBehavior, cancellationToken).ConfigureAwait(false))
 		{
 			var schema = reader.GetColumnSchema();
@@ -349,11 +349,11 @@ public sealed class MySqlBulkCopy
 
 		return new(errors, rowsInserted);
 
-		static string QuoteIdentifier(string identifier) => "`" + identifier.Replace("`", "``") + "`";
+		static string QuoteIdentifier(string identifier) => $"`{identifier.Replace("`", "``")}`";
 
 		static void AddColumnMapping(ILogger logger, List<MySqlBulkCopyColumnMapping> columnMappings, bool addDefaultMappings, int destinationOrdinal, string destinationColumn, string variableName, string expression)
 		{
-			expression = expression.Replace("%COL%", "`" + destinationColumn + "`").Replace("%VAR%", variableName);
+			expression = expression.Replace("%COL%", $"`{destinationColumn}`").Replace("%VAR%", variableName);
 			var columnMapping = columnMappings.FirstOrDefault(x => destinationColumn.Equals(x.DestinationColumn, StringComparison.OrdinalIgnoreCase));
 			if (columnMapping is not null)
 			{
