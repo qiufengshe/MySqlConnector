@@ -234,24 +234,28 @@ public sealed class MySqlBulkCopy
 			for (var i = 0; i < schema.Count; i++)
 			{
 				var destinationColumn = reader.GetName(i);
-				if (schema[i].DataTypeName == "BIT")
+				var dataTypeName = schema[i].DataTypeName;
+				if (dataTypeName == "BIT")
 				{
 					AddColumnMapping(m_logger, columnMappings, addDefaultMappings, i, destinationColumn, $"@`\uE002\bcol{i}`", $"%COL% = CAST(%VAR% AS UNSIGNED)");
-				}
-				else if (schema[i].DataTypeName == "YEAR")
-				{
-					// the current code can't distinguish between 0 = 0000 and 0 = 2000
-					throw new NotSupportedException("'YEAR' columns are not supported by MySqlBulkLoader.");
 				}
 				else
 				{
 					var type = schema[i].DataType;
-					if (type == typeof(byte[]) || (type == typeof(Guid) && (m_connection.GuidFormat is MySqlGuidFormat.Binary16 or MySqlGuidFormat.LittleEndianBinary16 or MySqlGuidFormat.TimeSwapBinary16)))
+					if (type == typeof(byte[]) ||
+						dataTypeName == "VECTOR" ||
+						(type == typeof(Guid) && (m_connection.GuidFormat is MySqlGuidFormat.Binary16 or MySqlGuidFormat.LittleEndianBinary16 or MySqlGuidFormat.TimeSwapBinary16)))
 					{
 						AddColumnMapping(m_logger, columnMappings, addDefaultMappings, i, destinationColumn, $"@`\uE002\bcol{i}`", $"%COL% = UNHEX(%VAR%)");
 					}
 					else if (addDefaultMappings)
 					{
+						if (schema[i].DataTypeName == "YEAR")
+						{
+							// the current code can't distinguish between 0 = 0000 and 0 = 2000
+							throw new NotSupportedException("'YEAR' columns are not supported by MySqlBulkCopy.");
+						}
+
 						Log.AddingDefaultColumnMapping(m_logger, i, destinationColumn);
 						columnMappings.Add(new(i, destinationColumn));
 					}
@@ -470,7 +474,7 @@ public sealed class MySqlBulkCopy
 			{
 				return Utf8Formatter.TryFormat(decimalValue, output, out bytesWritten);
 			}
-			else if (value is byte[] or ReadOnlyMemory<byte> or Memory<byte> or ArraySegment<byte> or MySqlGeometry)
+			else if (value is byte[] or ReadOnlyMemory<byte> or Memory<byte> or ArraySegment<byte> or MySqlGeometry or float[] or ReadOnlyMemory<float> or Memory<float>)
 			{
 				var inputSpan = value switch
 				{
@@ -478,6 +482,9 @@ public sealed class MySqlBulkCopy
 					ArraySegment<byte> arraySegment => arraySegment.AsSpan(),
 					Memory<byte> memory => memory.Span,
 					MySqlGeometry geometry => geometry.ValueSpan,
+					float[] floatArray => MySqlParameter.ConvertFloatsToBytes(floatArray.AsSpan()),
+					Memory<float> memory => MySqlParameter.ConvertFloatsToBytes(memory.Span),
+					ReadOnlyMemory<float> memory => MySqlParameter.ConvertFloatsToBytes(memory.Span),
 					_ => ((ReadOnlyMemory<byte>) value).Span,
 				};
 

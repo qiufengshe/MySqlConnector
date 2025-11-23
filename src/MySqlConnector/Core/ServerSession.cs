@@ -943,10 +943,15 @@ internal sealed partial class ServerSession : IServerCapabilities
 				payload = new([]);
 				await SendReplyAsync(payload, ioBehavior, cancellationToken).ConfigureAwait(false);
 				payload = await ReceiveReplyAsync(ioBehavior, cancellationToken).ConfigureAwait(false);
+				var extendedSalt = payload.Span;
 
-				Span<byte> combinedData = stackalloc byte[switchRequest.Data.Length + payload.Span.Length];
+				// MariaDB 11.8.4 sends an extra 0x01 byte at the beginning of ext-salt: https://github.com/mysql-net/MySqlConnector/issues/1606
+				if (extendedSalt.Length > 2 && extendedSalt[0] == 1 && extendedSalt[1] == 'P')
+					extendedSalt = extendedSalt[1..];
+
+				Span<byte> combinedData = stackalloc byte[switchRequest.Data.Length + extendedSalt.Length];
 				switchRequest.Data.CopyTo(combinedData);
-				payload.Span.CopyTo(combinedData.Slice(switchRequest.Data.Length));
+				extendedSalt.CopyTo(combinedData.Slice(switchRequest.Data.Length));
 
 				parsecPlugin3.CreateResponseAndPasswordHash(password, combinedData, out var parsecResponse, out m_passwordHash);
 				payload = new(parsecResponse);
@@ -2010,7 +2015,7 @@ internal sealed partial class ServerSession : IServerCapabilities
 		lock (m_lock)
 			m_state = State.Failed;
 		if (OwningConnection is not null && OwningConnection.TryGetTarget(out var connection))
-			connection.SetState(ConnectionState.Closed);
+			connection.SetState(ConnectionState.Broken);
 	}
 
 	private void VerifyState(State state)
